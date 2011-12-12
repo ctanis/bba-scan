@@ -66,17 +66,23 @@ sub load {
   my $users = $xml_parser->XMLin($self->{'path'} . $self->{'user.xml'})
     or confess;
 
+  # print Dumper($users);
+
   for my $bb_id (keys %{$users->{'USER'}}) {
     my $student = $users->{'USER'}->{$bb_id};
 
-    my $name =
-      $student->{'NAMES'}->{'GIVEN'}->{'value'} . " " .
-	$student->{'NAMES'}->{'FAMILY'}->{'value'};
+    my $last = $student->{'NAMES'}->{'FAMILY'}->{'value'};
+    my $first = $student->{'NAMES'}->{'GIVEN'}->{'value'};
+    my $full = "$first $last";
 
     my $uid = $student->{'BATCHUID'}->{'value'};
 
     ## blackboard id --> name, school id and blackboard id
-    $self->{'users'}->{$bb_id} = { name => $name, id => $uid, bb_id => $bb_id };
+    $self->{'users'}->{$bb_id} = { name => $full,
+				   first => $first,
+				   last => $last,
+				   id => $uid,
+				   bb_id => $bb_id };
   }
 
 
@@ -95,6 +101,8 @@ sub load {
 
 
   # process attempts
+  my %attempt_files;
+
   foreach my $attempt_base (@{$self->{'attempt.xml'}}) {
     my $attempt = $xml_parser->XMLin($self->{'path'} . $attempt_base . '.dat')
       or confess;
@@ -122,7 +130,8 @@ sub load {
 	}
 
 
-      push @{ $self->{'attempts'}->{$attempt_id} }, { path => $fullpath, type=> $filetype };
+      push @{$attempt_files{$attempt_id}}, { path => $fullpath, type=> $filetype }
+
     }
   }
 
@@ -139,100 +148,172 @@ sub load {
     my $outcome_title = $outcome->{'TITLE'}->{'value'};
     my $maxpoints = $outcome->{'POINTSPOSSIBLE'}->{'value'};
 
+    ## skip calculated columns in gradebook
+    next if $outcome->{'ISCALCULATED'}->{'value'} eq 'true';
+
     my $thisoutcome =
       $self->{'outcomes'}->{$outcome_id} = { id => $outcome_id,
 					     title => $outcome_title,
 					     points => $maxpoints };
 
 
-    my $outcome_attempts = $outcome->{'OUTCOMES'}->{'OUTCOME'};
+    my $student_outcomes = $outcome->{'OUTCOMES'}->{'OUTCOME'};
 
     ## why was this here?
-    ## next if defined $outcome_attempts->{'ATTEMPTS'}
+    ## next if defined $student_outcomes->{'ATTEMPTS'}
 
-    foreach my $att (keys %$outcome_attempts) {
-      my $memberid = $outcome_attempts->{$att}->{'COURSEMEMBERSHIPID'}->{'value'};
-      my $override = $outcome_attempts->{$att}->{'OVERRIDE_GRADE'};
+    ## for each student outcome id
+    foreach my $soid (keys %$student_outcomes) {
 
-      my @grades;
+      # get student and ultimate grade
+      my $memberid = $student_outcomes->{$soid}->{'COURSEMEMBERSHIPID'}->{'value'};
+      my $override = $student_outcomes->{$soid}->{'OVERRIDE_GRADE'};
 
-      if (defined $outcome_attempts->{$att}->{'ATTEMPTS'}->{'ATTEMPT'}->{'GRADE'})
+      # skip invalid students
+      next unless defined $self->{'membermap'}->{$memberid};
+
+      my $this_student_outcome = { student => $self->{'users'}->{ $self->{'membermap'}->{$memberid} },
+				   override => $override };
+
+      my @attempts;
+      if (defined $student_outcomes->{$soid}->{'ATTEMPTS'}->{'ATTEMPT'}->{'GRADE'})
 	{
 	  #single attempt
-	  push @grades, $outcome_attempts->{$att}->{'ATTEMPTS'}->{'ATTEMPT'};
+	  push @attempts, $student_outcomes->{$soid}->{'ATTEMPTS'}->{'ATTEMPT'};
 	}
       else
 	{
 	  # multiple attempts
 	  
-	  foreach my $k (keys %{$outcome_attempts->{$att}->{'ATTEMPTS'}->{'ATTEMPT'}}) {
+	  foreach my $k (keys %{$student_outcomes->{$soid}->{'ATTEMPTS'}->{'ATTEMPT'}}) {
 	    #store key as grade id
-	    my $tmp = $outcome_attempts->{$att}->{'ATTEMPTS'}->{'ATTEMPT'}->{$k};
+	    my $tmp = $student_outcomes->{$soid}->{'ATTEMPTS'}->{'ATTEMPT'}->{$k};
 	    $tmp->{'id'} = $k;
 
-	    push @grades, $tmp;
+	    push @attempts, $tmp;
 	  }
 	}
 
       ## collect and crossref actual grade info
-      my $grade_obj = [];
+      my $attempt_obj = [];
 
-      foreach my $grade (@grades) {
+
+      foreach my $attempt (@attempts) {
 	## each grade is an attempt for the current outcome
 	## each grade's attempt_id should have some components in the attempt file hash
 		
 
 	# create a graded attempt object
-	my $thisgrade = {};
+	my $thisattempt = {};
 
-	my $date_submitted = $grade->{'DATEATTEMPTED'}->{'value'};
-	my $student_submission = $grade->{'STUDENTSUBMISSION'}->{'TEXT'};
-	my $student_comments = $grade->{'STUDENTCOMMENTS'};
-	my $instructor_comments = $grade->{'INSTRUCTORCOMMENTS'}->{'TEXT'};
-	my $instructor_notes = $grade->{'INSTRUCTORNOTES'}->{'TEXT'};
-	my $attempt_grade = $grade->{'GRADE'}->{'value'};
+	my $date_submitted = $attempt->{'DATEATTEMPTED'}->{'value'};
+	my $student_submission = $attempt->{'STUDENTSUBMISSION'}->{'TEXT'};
+	my $student_comments = $attempt->{'STUDENTCOMMENTS'};
+	my $instructor_comments = $attempt->{'INSTRUCTORCOMMENTS'}->{'TEXT'};
+	my $instructor_notes = $attempt->{'INSTRUCTORNOTES'}->{'TEXT'};
+	my $attempt_grade;
+	my $files = $attempt_files{$attempt->{'id'}};
+
+	# skip empty grades
+	if (defined $attempt->{'GRADE'}->{'value'} and $attempt->{'GRADE'}->{'value'} ne "") {
+	  $attempt_grade= $attempt->{'GRADE'}->{'value'};
+	} else {
+	  next;
+	}
+
+	{
+	  no warnings;		# students may have been removed
+	  %$thisattempt=		(
+					 member => $memberid,
+					 outcome => $outcome_id, 
+					 date => $date_submitted,
+					 submission => $student_submission,
+					 comments => $student_comments,
+					 instructor_comments => $instructor_comments,
+					 instructor_notes => $instructor_notes,
+					 grade => $attempt_grade,
+					 files => $files
+					);
 
 
-	%$thisgrade =		(
-				 member => $memberid,
-				 outcome => $outcome_id, 
-				 student => $self->{'users'}->{ $self->{'membermap'}->{$memberid} },
-				 date => $date_submitted,
-				 submission => $student_submission,
-				 comments => $student_comments,
-				 instructor_comments => $instructor_comments,
-				 instructor_notes => $instructor_notes,
-				 grade => $attempt_grade
-				);
-
-	push @$grade_obj, $thisgrade;
+	  push @$attempt_obj, $thisattempt;
+	}
 		
       }
 
+      next unless @$attempt_obj;
+
+      # finish building *this* student outcome object
+      $this_student_outcome->{'attempts'}=$attempt_obj;
+
 
       # add reference to outcome
-      push @{$thisoutcome->{'grade'}}, $grade_obj;
+      push @{$thisoutcome->{'grades'}}, $this_student_outcome;
 
 
       # add reference to student
-      my $student_bbid = $self->{'membermap'}->{$memberid};
-      $self->{'users'}->{$student_bbid}->{'grades'}->{$outcome_id} =
-	$grade_obj;
+      {
+	no warnings;		# students may have been removed
+	my $student_bbid = $self->{'membermap'}->{$memberid};
+	$self->{'users'}->{$student_bbid}->{'grades'}->{$outcome_id} = $this_student_outcome;
+      }
     }
   }
 }
 
+## this sorts outcome names in a way that makes sense to me!
+## alphabetic sort unless numbers show up
+
+sub outcome_sorter($$)
+{
+    my ($n1, $n2) = @_;
+    my @s1 = split /\s+/, $n1;
+    my @s2 = split /\s+/, $n2;
+
+    while (@s1 && @s2)
+    {
+	my $r;
+	my $w1 = shift @s1;
+	my $w2 = shift @s2;
+
+	no warnings;
+	$r = $w1 <=> $w2;
+	return $r if $r;
+
+	$r = $w1 cmp $w2;
+	return $r if $r;
+    }
+
+    return $n1 cmp $n2;
+}
+
+
+    
+
+
 
 sub outcomes() {
-  my ($self) = @ARGV;
-  #return map { bless $_ } @{ $self->{'outcomes'} };
-  return @{ $self->{'outcomes'} };
+  my ($self) = @_;
+  return
+    map { bless $_ } sort { outcome_sorter $a->{'title'}, $b->{'title'} }
+      values %{ $self->{'outcomes'} };
 }
     
 
-sub students() {
-  my ($self) = @ARGV;
-  return map { bless $_ } @{ $self->{'outcomes'} };
+sub student_outcomes() {
+  my ($self) = @_;
+  return map { bless $_ }
+    sort { $a->{'student'}->{'last'} cmp $b->{'student'}->{'last'} }
+      @{ $self->{'grades'} };
 }
+
+
+sub grades() {
+  my ($self) = @_;
+  return map { bless $_ } @{ $self->{'grades'} };
+}
+	      
+
+
 
 1;
