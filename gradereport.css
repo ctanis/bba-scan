@@ -1,0 +1,35 @@
+.outcome { 
+margin: 5px;
+}
+
+.outcome_name {
+    font-size: 14pt;
+    margin-top: 5px;    
+    margin-bottom: 5px;
+}
+
+
+.students {
+    border: solid 1px #000000;
+    display: none;
+}
+
+.student {
+    margin: 20px;
+    width: 600px;
+    border-bottom: solid 1px #000000;
+    }
+
+.student_name {
+
+}
+
+.score {
+
+}
+
+.comment {
+    margin: 10px;
+    padding: 10px;
+}
+    
