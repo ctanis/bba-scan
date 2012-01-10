@@ -43,31 +43,87 @@ EOF
 
 # # for each outcome (aka course grade element)
 foreach my $outcome ($bba->outcomes()) {
-  print $outcome->{'title'}, "\n";
+  print OUT '<div class="outcome">';
 
+
+  print OUT '<div class="outcome_name"><a href="#" onClick=toggleContent("'. $outcome->{'id'} .'")>' . $outcome->{'title'} . "</a></div>\n";
 
   ## for each student/outcome combo..
+  print OUT '<div class="students" id="' . $outcome->{'id'} .'">';
+
   foreach my $student_outcome ($outcome->student_outcomes()) {
 
-    print "student: " . $student_outcome->{'student'}->{'name'}, "\n";
-    print "override: " . $student_outcome->{'override'}, "\n";
+    print OUT '<div class="student">';
+
+    print OUT '<div class="student_name">Student: ' . $student_outcome->{'student'}->{'name'}, "</div>\n";
+    if (defined $student_outcome->{'override'})
+      {
+	print OUT '<div class="grade_override">Official Grade: ' . $student_outcome->{'override'}, "</div>\n";
+      }
+
+    print OUT '<div class="attempts">';
 
     ## for each attempt at getting a grade.. (usually just 1)
-    foreach my $attempt (@{$student_outcome->{'attempts'}}) {
+    my $i=1;
+    my $attempt_count = @{$student_outcome->{'attempts'}};
 
+    foreach my $attempt (@{$student_outcome->{'attempts'}}) {
+      print OUT '<div class="attempt">';
 
       ## for each file involved in this one
-      next unless defined $attempt->{'files'};
-      foreach my $f (sort { $b->{'type'} cmp $a->{'type'}} @{$attempt->{'files'}}) {
-	print $f->{'path'}, " -- " , $f->{'type'}, "\n";
+      if ($attempt_count > 1) {
+	print OUT "Attempt $i<br />";
       }
+
+      if (defined $attempt->{'grade'}) {
+	print OUT "Grade: ", $attempt->{'grade'},"<br />\n";
+      }
+
+      if (defined $attempt->{'submission'} && ! ref $attempt->{'submission'}) {
+	print OUT '<div class="submission">Submission: ' . $attempt->{'submission'} . "</div>\n";
+      }
+
+
+
+      if (defined $attempt->{'instructor_comments'} && ! ref $attempt->{'instructor_comments'}) {
+	print OUT '<div class="instcomm">Instructor Comments: ' . $attempt->{'instructor_comments'} . "</div>\n";
+      }
+
+
+
+      
+      if (defined $attempt->{'files'})
+	{
+	  print OUT '<div class="files">';
+	  print OUT "Files:<br/>";
+
+	  foreach my $f (sort { $b->{'type'} cmp $a->{'type'}} @{$attempt->{'files'}}) {
+	    my $file = $f->{'path'};
+
+	    print OUT "<a href=\"$file\">", `basename '$file'`, '</a> (',$f->{'type'},')<br />'
+
+	      #	print OUT "<a href='" .$f->{'path'},.'">'. `basename '$f->{'path'}'` .  "</a> -- " , $f->{'type'}, "<br/>\n";
+
+
+	  }
+
+	  print OUT '</div>';
+	}
+
+      print OUT "</div>\n";	# attempt
     }
 
 
+
+    print OUT "</div>\n";		# attempts
+
+
+    print OUT "</div>\n";		# student
   }
 
-  #   print '<div class="outcome_title">' . $outcome->{'title'} . "</div>\n";
-  
+
+
+  print OUT "</div>\n";		# students
 
 
   #   ## for each student
@@ -85,6 +141,9 @@ foreach my $outcome ($bba->outcomes()) {
   #     #### print grade
   #   }
 
+
+
+  print OUT "</div>\n";		# end outcome
 }
 
 print OUT <<EOF
