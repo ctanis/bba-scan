@@ -12,6 +12,9 @@ use constant
    USER_TYPE => 'course/x-bb-user',
    ATTEMPT_TYPE => 'course/x-bb-attemptfiles',
    COURSEMEMBER_TYPE => 'membership/x-bb-coursemembership',
+   RUBRIC_DEF => 'course/x-bb-rubrics',
+   RUBRIC_EVAL => 'course/x-bb-crsrubriceval',
+   RUBRIC_ASSOC => 'course/x-bb-crsrubricassocation',
    MANIFEST_FILE => 'imsmanifest.xml' 
   };
 
@@ -59,8 +62,114 @@ sub load {
     if ($type eq COURSEMEMBER_TYPE) {
       $self->{'coursemember.xml'} = $resource->{'bb:file'};
     }
+
+    if ($type eq RUBRIC_DEF) {
+      $self->{'rubricdef.xml'} = $resource->{'bb:file'};
+    }
+
+    if ($type eq RUBRIC_ASSOC) {
+      $self->{'rubricassoc.xml'} = $resource->{'bb:file'};
+    }
+
+    if ($type eq RUBRIC_EVAL) {
+      $self->{'rubriceval.xml'} = $resource->{'bb:file'};
+    }
+
   }
 
+
+  ## load rubrics
+
+  my $rubricdefs = $xml_parser->XMLin($self->{'path'} . $self->{'rubricdef.xml'})
+    or confess;
+
+  # my $rubricassoc = $xml_parser->XMLin($self->{'path'} . $self->{'rubricassoc.xml'})
+  #   or confess;
+
+  my $rubriceval = $xml_parser->XMLin($self->{'path'} . $self->{'rubriceval.xml'})
+    or confess;
+
+
+  ## build description of rubric cells
+
+  for my $rubric_id (keys %{$rubricdefs->{'Rubric'}}) {
+    
+      my $rubx = $rubricdefs->{'Rubric'}->{$rubric_id};
+      my $new_rubric = $self->{'rubrics'}->{$rubric_id} = {};
+
+      $new_rubric->{'title'} = $rubx->{'Title'};
+      $new_rubric->{'desc'} = $rubx->{'Description'};
+
+
+      my $rowid;
+      my $rowhash;
+
+      while (($rowid,$rowhash) = each %{$rubx->{'RubricRows'}->{'Row'}}) {
+	my $rowhdr = $rowhash->{'Header'}->{'value'};
+
+	# print STDERR "$rowhdr\n";
+
+	my $colarray;
+
+	## make sure it's an array
+	if ((ref $rowhash->{'RubricColumns'}->{'Column'}) eq 'ARRAY') {
+	  $colarray = $rowhash->{'RubricColumns'}->{'Column'};
+	}
+	else {
+	  $colarray = [ $rowhash->{'RubricColumns'}->{'Column'} ];
+	}
+
+	for my $col (@$colarray) {
+	      
+	  my $celldesc = $self->{'rubriccells'}->{$col->{'Cell'}->{'id'}} = {};
+
+	  $celldesc->{'desc'} = $col->{'Cell'}->{'CellDescription'}->{'value'};
+	  $celldesc->{'title'} = $rowhdr;
+	}
+      }
+
+
+    }
+
+  ## build mapping from attempts to rubric evaluations
+  for my $rub_eval (values %{$rubriceval->{'RUBRIC_EVALUATION'}})
+    {
+#      print Dumper($rub_eval);
+
+      my $attempt = $rub_eval->{'ATTEMPT_ID'}->{'value'};
+
+      next unless $attempt;
+
+      my $rubattempt = $self->{'attempt_rubric'}->{$attempt} = {};
+      my $text = 
+	$rub_eval->{'RUBRIC_EVAL'}->{'COMMENTS'}->{'COMMENTS_TEXT'};
+
+      if (ref $text) {
+	$rubattempt->{'comment'} = $text->{'value'};
+      }
+      else {
+	$rubattempt->{'comment'} = $text;
+      }
+
+
+      for my $rubcell (values %{$rub_eval->{'RUBRIC_EVAL'}->{'RUBRIC_CELL_EVAL'}})
+	{
+	  my $fdbk = $rubcell->{'FEEDBACK'};
+
+	  if (ref $fdbk)
+	    {
+	      $fdbk = $fdbk->{'FEEDBACK_TEXT'};
+	    }
+
+	  push @{$rubattempt->{'cells'}},
+	    { cell => $rubcell->{'RUBRIC_CELL_ID'}->{'value'},
+	      message => $fdbk };
+
+	}
+    }
+
+
+  
 
   # create user hash
   my $users = $xml_parser->XMLin($self->{'path'} . $self->{'user.xml'})
@@ -214,6 +323,31 @@ sub load {
 	my $attempt_grade;
 	my $files = $attempt_files{$attempt->{'id'}};
 
+	my $rubric=undef;
+
+	if (exists $self->{'attempt_rubric'}->{$attempt->{'id'}}) {
+
+	  my $rubattempt = $self->{'attempt_rubric'}->{$attempt->{'id'}};
+
+	  $rubric->{'comment'} = $rubattempt->{'text'};
+	  $rubric->{'cells'} = [];
+#	  print STDERR $rubric->{'comment'}, "\n";
+
+	  for my $note (@{$rubattempt->{'cells'}}) {
+
+#	    print STDERR Dumper($note);
+
+	    push @{$rubric->{'cells'}},
+	      { cell => $self->{'rubriccells'}->{$note->{'cell'}},
+		comment => $note->{'message'} };
+
+	  }
+
+
+
+	}
+
+
 	# skip empty grades
 	if (defined $attempt->{'GRADE'}->{'value'} and $attempt->{'GRADE'}->{'value'} ne "") {
 	  $attempt_grade= $attempt->{'GRADE'}->{'value'};
@@ -232,7 +366,8 @@ sub load {
 					 instructor_comments => $instructor_comments,
 					 instructor_notes => $instructor_notes,
 					 grade => $attempt_grade,
-					 files => $files
+					 files => $files,
+					 rubric => $rubric
 					);
 
 

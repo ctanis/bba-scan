@@ -33,3 +33,24 @@ margin: 5px;
     padding: 10px;
 }
     
+
+.rubric {
+    
+}
+
+.rubricrow {
+    border: solid 1px black;
+}
+
+.rubricrowcat {
+    border-right: solid 1px black;
+    font-weight: bold;
+}
+
+.rubrowdesc {
+    font-size: small;
+}
+
+.rubrowcomm {
+    color: red;
+}

@@ -79,6 +79,33 @@ foreach my $outcome ($bba->outcomes()) {
 	print OUT "Grade: ", $attempt->{'grade'},"<br />\n";
       }
 
+      if (defined $attempt->{'rubric'}) {
+#	print STDERR Dumper ($attempt->{'rubric'});
+
+	print OUT "Rubric Breakdown:<br />\n";
+	print OUT $attempt->{'rubric'}->{'comment'}
+	  if defined $attempt->{'rubric'}->{'comment'};
+	  
+
+	print OUT '<div class="rubric">';
+	
+
+	for my $c (@{$attempt->{'rubric'}->{'cells'}})
+	  {
+	    print OUT '<div class="rubricrow">';
+
+	    print OUT '<div class="rubrowcat">' . $c->{'cell'}->{'title'} ;
+	    print OUT '<div class="rubrowdesc">' . $c->{'cell'}->{'desc'}. '</div></div>';
+	    print OUT '<div class="rubrowcomm">' . $c->{'comment'} . '</div>';
+
+	    print OUT '</div>'
+	  }
+
+	print OUT '</div>';
+      }
+
+
+
       if (defined $attempt->{'submission'} && ! ref $attempt->{'submission'}) {
 	print OUT '<div class="submission">Submission: ' . $attempt->{'submission'} . "</div>\n";
       }
