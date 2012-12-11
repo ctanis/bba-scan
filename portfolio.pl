@@ -4,7 +4,7 @@ use strict;
 use bbarchive;
 use Data::Dumper;
 
-my ($archpath, $output) = @ARGV;
+my ($archpath, $output, $artifacts) = @ARGV;
 die "usage error" unless $archpath;
 
 if ($output) {
@@ -12,6 +12,23 @@ if ($output) {
 } else {
   open OUT, ">&STDOUT" or die "cannot dup stdout: $!";
 }
+
+my @artifacts=();
+if ($artifacts) {
+  ## read sorted outcome list from this file instead of using all artifacts
+  open IN, $artifacts or die "cannot open $artifacts for reading: $!";
+
+  while (<IN>) {
+    chomp;
+    next unless $_;
+    push @artifacts, $_;
+  }
+
+}
+
+# print Dumper (@artifacts);
+# exit;
+
 
 
 # parse archive
@@ -42,7 +59,20 @@ EOF
 
 
 # # for each outcome (aka course grade element)
-foreach my $outcome ($bba->outcomes()) {
+my @outcomes=();
+if ($artifacts)
+  {
+    foreach my $title (@artifacts) {
+      push @outcomes, $bba->outcome($title);
+    }
+
+  }
+else {
+  @outcomes = $bba->outcomes();
+}
+  
+
+foreach my $outcome (@outcomes) {
   print OUT '<div class="outcome">';
 
 

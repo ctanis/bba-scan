@@ -1,6 +1,6 @@
 package bbarchive;
 
-use strict;
+#use strict;
 use Carp qw(confess);
 use XML::Simple;
 use Data::Dumper;
@@ -425,6 +425,18 @@ sub outcome_sorter($$)
 
     
 
+sub outcome($) {
+  my ($self, $title) = @_;
+
+  foreach my $o (values %{ $self->{'outcomes'} })
+    {
+      if ($o->{'title'} eq $title)
+	{
+	  return bless $o;
+	}
+    }
+  return undef;
+}
 
 
 sub outcomes() {
