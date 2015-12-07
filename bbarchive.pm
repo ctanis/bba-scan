@@ -315,6 +315,7 @@ sub load {
 	# create a graded attempt object
 	my $thisattempt = {};
 
+        my $attempt_id = $attempt->{'id'};
 	my $date_submitted = $attempt->{'DATEATTEMPTED'}->{'value'};
 	my $student_submission = $attempt->{'STUDENTSUBMISSION'}->{'TEXT'};
 	my $student_comments = $attempt->{'STUDENTCOMMENTS'};
@@ -355,10 +356,19 @@ sub load {
 	  next;
 	}
 
+
+
+
 	{
 	  no warnings;		# students may have been removed
+
+          my $archive_dir = $self->{'path'};
+          $instructor_comments =~ s/\@X\@EmbeddedFile\.cslocation\@X\@/$archive_dir\/csfiles\/privatedoc\/gradebook\/notesAndFeedback\/attempt\/$attempt_id\//g;
+          
+
 	  %$thisattempt=		(
-					 member => $memberid,
+					 attempt => $attempt_id,
+                                         member => $memberid,
 					 outcome => $outcome_id, 
 					 date => $date_submitted,
 					 submission => $student_submission,
@@ -369,6 +379,14 @@ sub load {
 					 files => $files,
 					 rubric => $rubric
 					);
+
+
+
+
+          # if ($instructor_comments =~ /EmbeddedFile/) {
+          #   print STDERR Dumper %$thisattempt;
+          # }
+
 
 
 	  push @$attempt_obj, $thisattempt;
