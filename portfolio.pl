@@ -3,6 +3,7 @@
 use strict;
 use bbarchive;
 use Data::Dumper;
+use File::Basename;
 
 my ($archpath, $output, $artifacts) = @ARGV;
 die "usage error" unless $archpath;
@@ -157,7 +158,11 @@ foreach my $outcome (@outcomes) {
 	  foreach my $f (sort { $b->{'type'} cmp $a->{'type'}} @{$attempt->{'files'}}) {
 	    my $file = $f->{'path'};
 
-	    print OUT "<a href=\"$file\">", `basename '$file'`, '</a> (',$f->{'type'},')<br />'
+            # $file =~ s/'/\\'/g;
+
+            # print STDERR "processing **$file\n**";
+
+	    print OUT "<a href=\"$file\">", basename($file), '</a> (',$f->{'type'},')<br />'
 
 	      #	print OUT "<a href='" .$f->{'path'},.'">'. `basename '$f->{'path'}'` .  "</a> -- " , $f->{'type'}, "<br/>\n";
 
